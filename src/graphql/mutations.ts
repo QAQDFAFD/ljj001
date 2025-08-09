@@ -11,3 +11,13 @@ export const SEND_MESSAGE_STREAM = gql`
     sendMessageStream(content: $content)
   }
 `
+
+// 新的：通过 GraphQL 启动流，返回 SSE 端点
+export const START_STREAM = gql`
+  mutation StartStream($content: String!) {
+    startStream(content: $content) {
+      streamId
+      sseEndpoint
+    }
+  }
+`

@@ -11,102 +11,97 @@ interface StreamingOptions {
 export function useStreamingGraphQL() {
   const client = useApolloClient()
 
-  const executeStreamingMutation = useCallback(
+  // 新增：通过 GraphQL mutation 启动流，随后使用 EventSource 接收增量
+  const startGraphQLSSEStream = useCallback(
     async (mutation: DocumentNode, variables: Record<string, unknown>, options: StreamingOptions) => {
       const { onChunk, onComplete, onError } = options
 
       try {
-        // 获取 GraphQL 端点
-        const link = client.link as { options?: { uri?: string } }
-        const uri = link?.options?.uri || 'https://deepseek.qaqdfafd.workers.dev/graphql'
-
-        // 构造 GraphQL 请求
-        const body = {
-          query: (mutation as { loc: { source: { body: string } } }).loc.source.body,
+        const result = await client.mutate<{ startStream?: { streamId: string; sseEndpoint: string } }>({
+          mutation,
           variables
-        }
-
-        // 发起流式请求
-        const response = await fetch(`${uri}/stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(body)
         })
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+        const sseEndpoint = result.data?.startStream?.sseEndpoint
+        if (!sseEndpoint) {
+          throw new Error('Missing sseEndpoint from startStream response')
         }
 
-        const reader = response.body?.getReader()
-        if (!reader) {
-          throw new Error('Response body is not readable')
-        }
+        await new Promise<void>((resolve, reject) => {
+          const eventSource = new EventSource(sseEndpoint)
 
-        const decoder = new TextDecoder()
-        let buffer = ''
+          const handleError = (err?: unknown) => {
+            try {
+              eventSource.close()
+            } catch (closeErr) {
+              console.debug('SSE close error (handleError):', closeErr)
+            }
+            const error = err instanceof Error ? err : new Error('SSE connection error')
+            onError(error)
+            reject(error)
+          }
 
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
+          // 可选：连接事件
+          eventSource.addEventListener('connected', () => {
+            console.debug('SSE connected')
+          })
 
-            if (done) break
-
-            // 累积数据到缓冲区
-            buffer += decoder.decode(value, { stream: true })
-
-            // 处理完整的行
-            const lines = buffer.split('\n')
-            // 保留最后一行（可能不完整）
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              const trimmedLine = line.trim()
-              if (trimmedLine === '') continue
-
-              if (trimmedLine.startsWith('data: ')) {
-                const data = trimmedLine.slice(6).trim()
-
-                if (data === '[DONE]') {
-                  onComplete()
-                  return
-                }
-
-                // 跳过空数据
-                if (!data) continue
-
-                try {
-                  const parsed = JSON.parse(data)
-                  let content = ''
-
-                  // 支持多种数据格式
-                  if (parsed.data?.sendMessageStream) {
-                    content = parsed.data.sendMessageStream
-                  } else if (parsed.content) {
-                    content = parsed.content
-                  } else if (typeof parsed === 'string') {
-                    content = parsed
-                  }
-
-                  if (content) {
-                    onChunk(content)
-                  }
-                } catch (e) {
-                  console.error('Error parsing SSE data:', e, 'Raw data:', data)
-                  // 如果 JSON 解析失败，尝试直接使用数据
-                  if (data && !data.startsWith('{') && !data.startsWith('[')) {
-                    onChunk(data)
-                  }
-                }
+          // 核心：增量事件
+          eventSource.addEventListener('delta', (evt: MessageEvent) => {
+            try {
+              const data = JSON.parse(evt.data)
+              const delta: string = data?.delta ?? ''
+              const content: string = data?.content ?? ''
+              if (delta) {
+                onChunk(delta)
+              } else if (content) {
+                onChunk(content)
               }
+            } catch {
+              if (evt.data) onChunk(String(evt.data))
+            }
+          })
+
+          // 兼容：服务端如果不分事件类型，走默认 message
+          eventSource.onmessage = (evt: MessageEvent) => {
+            try {
+              const data = JSON.parse(evt.data)
+              const delta: string = data?.delta ?? ''
+              const content: string = data?.content ?? ''
+              if (delta) {
+                onChunk(delta)
+              } else if (content) {
+                onChunk(content)
+              }
+            } catch {
+              if (evt.data) onChunk(String(evt.data))
             }
           }
 
-          onComplete()
-        } finally {
-          reader.releaseLock()
-        }
+          // 完成事件
+          eventSource.addEventListener('done', () => {
+            try {
+              eventSource.close()
+            } catch (closeErr) {
+              console.debug('SSE close error (done):', closeErr)
+            }
+            onComplete()
+            resolve()
+          })
+
+          // 错误事件（来自服务器）
+          eventSource.addEventListener('error', (evt: MessageEvent) => {
+            try {
+              const data = JSON.parse(evt.data)
+              handleError(new Error(data?.message || 'SSE server error'))
+            } catch {
+              handleError(new Error('SSE server error'))
+            }
+          })
+
+          // 网络/连接错误
+          eventSource.onerror = () => handleError()
+        })
       } catch (error) {
         onError(error as Error)
       }
@@ -114,5 +109,5 @@ export function useStreamingGraphQL() {
     [client]
   )
 
-  return { executeStreamingMutation }
+  return { startGraphQLSSEStream }
 }

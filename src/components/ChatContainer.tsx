@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
-import { SEND_MESSAGE_STREAM } from '../graphql/mutations'
+import { START_STREAM } from '../graphql/mutations'
 import { useStreamingGraphQL } from '../hooks/useStreamingGraphQL'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
 import './ChatContainer.css'
@@ -9,7 +9,7 @@ import './ChatContainer.css'
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const { executeStreamingMutation } = useStreamingGraphQL()
+  const { startGraphQLSSEStream } = useStreamingGraphQL()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chunkBufferRef = useRef<string>('')
   const updateTimeoutRef = useRef<number | null>(null)
@@ -47,9 +47,9 @@ export function ChatContainer() {
     setIsLoading(true)
     hasReceivedFirstChunkRef.current = false // 重置首字符接收状态
 
-    // 使用流式 GraphQL
-    await executeStreamingMutation(
-      SEND_MESSAGE_STREAM,
+    // 使用 GraphQL mutation 启动流 + SSE 接收
+    await startGraphQLSSEStream(
+      START_STREAM,
       { content },
       {
         onChunk: (chunk: string) => {
