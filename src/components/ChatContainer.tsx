@@ -79,7 +79,7 @@ export function ChatContainer() {
     <div className='chat-container'>
       <header className='chat-header'>
         <h1>AI 聊天助手</h1>
-        <p>基于 GraphQL 的智能对话系统</p>
+        <p>基于 deepseek 的智能对话系统</p>
       </header>
 
       <div className='messages-container'>

@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
 import './ChatMessage.css'
 
@@ -19,7 +20,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
               正在思考中...
             </span>
           ) : (
-            message.content
+            <ReactMarkdown>{message.content}</ReactMarkdown>
           )}
         </div>
         {!isLoading && <div className='message-timestamp'>{new Date(message.timestamp).toLocaleTimeString()}</div>}
