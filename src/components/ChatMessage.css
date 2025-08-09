@@ -78,3 +78,32 @@
 .chat-message.user .message-timestamp {
   text-align: right;
 }
+
+/* Loading 状态样式 */
+.chat-message.loading .message-text {
+  opacity: 0.8;
+}
+
+.loading-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #10a37f;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

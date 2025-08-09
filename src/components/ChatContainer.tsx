@@ -30,13 +30,24 @@ export function ChatContainer() {
 
     setMessages(prev => [...prev, userMessage])
 
+    // 添加 loading 消息
+    const loadingMessage: ChatMessageType = {
+      id: 'loading',
+      content: '正在思考中...',
+      role: 'assistant',
+      timestamp: new Date().toISOString()
+    }
+    setMessages(prev => [...prev, loadingMessage])
+
     try {
       // 发送到后端
       const { data } = await sendMessage({
         variables: { content }
       })
 
-      // 添加 AI 回复
+      // 移除 loading 消息并添加 AI 回复
+      setMessages(prev => prev.filter(msg => msg.id !== 'loading'))
+
       if (data?.sendMessage) {
         const assistantMessage: ChatMessageType = {
           id: (Date.now() + 1).toString(),
@@ -48,6 +59,9 @@ export function ChatContainer() {
       }
     } catch (error) {
       console.error('发送消息失败:', error)
+
+      // 移除 loading 消息
+      setMessages(prev => prev.filter(msg => msg.id !== 'loading'))
 
       // 模拟 AI 回复（当后端不可用时）
       const assistantMessage: ChatMessageType = {
