@@ -38,7 +38,13 @@ export function ChatContainer() {
 
       // 添加 AI 回复
       if (data?.sendMessage) {
-        setMessages(prev => [...prev, data.sendMessage])
+        const assistantMessage: ChatMessageType = {
+          id: (Date.now() + 1).toString(),
+          content: data.sendMessage,
+          role: 'assistant',
+          timestamp: new Date().toISOString()
+        }
+        setMessages(prev => [...prev, assistantMessage])
       }
     } catch (error) {
       console.error('发送消息失败:', error)

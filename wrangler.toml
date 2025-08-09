@@ -1,0 +1,4 @@
+name = "deepseek-worker-dev"
+
+[vars]
+DEEPSEEK_API_KEY = "sk-8c29971059fb4a6dad314cf2abde54f6"

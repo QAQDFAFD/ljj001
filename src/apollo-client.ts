@@ -2,7 +2,7 @@ import { ApolloClient, InMemoryCache, createHttpLink } from '@apollo/client'
 
 // 配置 GraphQL 端点
 const httpLink = createHttpLink({
-  uri: 'https://ljj001.xyz.your-username.workers.dev/graphql' // 替换为你的 GraphQL 端点
+  uri: 'https://deepseek.qaqdfafd.workers.dev/graphql' // 替换为你的 GraphQL 端点
 })
 
 // 创建 Apollo Client 实例
