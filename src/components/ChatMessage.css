@@ -108,6 +108,44 @@
   }
 }
 
+/* 等待第一个字符的跳动省略号 */
+.waiting-dots {
+  display: inline-block;
+  color: #6b7280;
+}
+
+.waiting-dots span {
+  animation: bounce-dots 1.4s infinite;
+  opacity: 0.4;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.waiting-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.waiting-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.waiting-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce-dots {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-8px);
+  }
+}
+
 /* Markdown 样式 */
 .message-text h1,
 .message-text h2,

@@ -5,3 +5,9 @@ export const SEND_MESSAGE = gql`
     sendMessage(content: $content)
   }
 `
+
+export const SEND_MESSAGE_STREAM = gql`
+  mutation SendMessageStream($content: String!) {
+    sendMessageStream(content: $content)
+  }
+`

@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import { useMutation } from '@apollo/client'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
-import { SEND_MESSAGE } from '../graphql/mutations'
+import { SEND_MESSAGE_STREAM } from '../graphql/mutations'
+import { useStreamingGraphQL } from '../hooks/useStreamingGraphQL'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
 import './ChatContainer.css'
 
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
-  const [sendMessage, { loading }] = useMutation(SEND_MESSAGE)
+  const [isLoading, setIsLoading] = useState(false)
+  const { executeStreamingMutation } = useStreamingGraphQL()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chunkBufferRef = useRef<string>('')
+  const updateTimeoutRef = useRef<number | null>(null)
+  const hasReceivedFirstChunkRef = useRef<boolean>(false)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -30,49 +34,86 @@ export function ChatContainer() {
 
     setMessages(prev => [...prev, userMessage])
 
-    // 添加 loading 消息
-    const loadingMessage: ChatMessageType = {
-      id: 'loading',
-      content: '正在思考中...',
+    // 添加loading状态的 AI 消息，准备接收流式内容
+    const assistantMessageId = (Date.now() + 1).toString()
+    const initialAssistantMessage: ChatMessageType = {
+      id: assistantMessageId,
+      content: '',
       role: 'assistant',
       timestamp: new Date().toISOString()
     }
-    setMessages(prev => [...prev, loadingMessage])
+    setMessages(prev => [...prev, initialAssistantMessage])
 
-    try {
-      // 发送到后端
-      const { data } = await sendMessage({
-        variables: { content }
-      })
+    setIsLoading(true)
+    hasReceivedFirstChunkRef.current = false // 重置首字符接收状态
 
-      // 移除 loading 消息并添加 AI 回复
-      setMessages(prev => prev.filter(msg => msg.id !== 'loading'))
+    // 使用流式 GraphQL
+    await executeStreamingMutation(
+      SEND_MESSAGE_STREAM,
+      { content },
+      {
+        onChunk: (chunk: string) => {
+          // 调试信息
+          console.log('Received chunk:', chunk)
 
-      if (data?.sendMessage) {
-        const assistantMessage: ChatMessageType = {
-          id: (Date.now() + 1).toString(),
-          content: data.sendMessage,
-          role: 'assistant',
-          timestamp: new Date().toISOString()
+          // 检查是否是第一个字符
+          if (!hasReceivedFirstChunkRef.current) {
+            console.log('First chunk received, hiding dots animation')
+            hasReceivedFirstChunkRef.current = true
+          }
+
+          // 累积 chunks 到缓冲区
+          chunkBufferRef.current += chunk
+
+          // 清除之前的定时器
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current)
+          }
+
+          // 批量更新，减少渲染频率
+          updateTimeoutRef.current = setTimeout(() => {
+            const bufferedContent = chunkBufferRef.current
+            setMessages(prev =>
+              prev.map(msg =>
+                msg.id === assistantMessageId ? { ...msg, content: msg.content + bufferedContent } : msg
+              )
+            )
+            chunkBufferRef.current = '' // 清空缓冲区
+          }, 50) // 50ms 批量更新间隔
+        },
+        onComplete: () => {
+          // 清除定时器并处理剩余缓冲区内容
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current)
+          }
+
+          // 处理最后的缓冲区内容
+          if (chunkBufferRef.current) {
+            const finalContent = chunkBufferRef.current
+            setMessages(prev =>
+              prev.map(msg => (msg.id === assistantMessageId ? { ...msg, content: msg.content + finalContent } : msg))
+            )
+            chunkBufferRef.current = ''
+          }
+
+          setIsLoading(false)
+          hasReceivedFirstChunkRef.current = false // 重置状态
+          console.log('Stream completed')
+        },
+        onError: (error: Error) => {
+          console.error('发送消息失败:', error)
+          setIsLoading(false)
+          hasReceivedFirstChunkRef.current = false // 重置状态
+
+          // 更新消息为错误内容
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId ? { ...msg, content: '抱歉，我现在无法连接到服务器。请稍后再试。' } : msg
+            )
+          )
         }
-        setMessages(prev => [...prev, assistantMessage])
       }
-    } catch (error) {
-      console.error('发送消息失败:', error)
-
-      // 移除 loading 消息
-      setMessages(prev => prev.filter(msg => msg.id !== 'loading'))
-
-      // 模拟 AI 回复（当后端不可用时）
-      const assistantMessage: ChatMessageType = {
-        id: (Date.now() + 1).toString(),
-        content: '抱歉，我现在无法连接到服务器。这是一个模拟回复，请确保后端服务正在运行。',
-        role: 'assistant',
-        timestamp: new Date().toISOString()
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-    }
+    )
   }
 
   return (
@@ -95,7 +136,7 @@ export function ChatContainer() {
         <div ref={messagesEndRef} />
       </div>
 
-      <ChatInput onSendMessage={handleSendMessage} disabled={loading} />
+      <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
     </div>
   )
 }
